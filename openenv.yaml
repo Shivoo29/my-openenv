@@ -1,0 +1,209 @@
+name: SupportEnv
+version: "1.0.0"
+description: >
+  An OpenEnv-compliant customer support ticket triage environment for SaaS platforms.
+  Agents learn to classify tickets, extract structured information, and generate
+  professional resolutions — skills directly transferable to real-world support automation.
+
+domain: customer_support
+tags:
+  - openenv
+  - customer-support
+  - nlp
+  - information-extraction
+  - classification
+  - generation
+  - real-world
+
+license: MIT
+author: SupportEnv Contributors
+
+# -------------------------------------------------
+# Environment interface
+# -------------------------------------------------
+interface:
+  reset:
+    method: POST
+    path: /reset
+    request:
+      task_id: string        # task1 | task2 | task3
+      ticket_index: integer  # optional, 0-4
+    response: Observation
+
+  step:
+    method: POST
+    path: /step
+    request:
+      episode_id: string
+      action: Action
+    response: StepResult     # {observation, reward, done, info}
+
+  state:
+    method: GET
+    path: /state
+    params:
+      episode_id: string
+    response: State
+
+  tasks:
+    method: GET
+    path: /tasks
+    response: List[TaskInfo]
+
+  grader:
+    method: POST
+    path: /grader
+    request:
+      episode_id: string
+    response: GraderResponse
+
+  baseline:
+    method: POST
+    path: /baseline
+    request:
+      model: string          # optional, default heuristic
+      ticket_index: integer  # optional, default 0
+    response: BaselineResult
+
+  health:
+    method: GET
+    path: /health
+
+# -------------------------------------------------
+# Typed models
+# -------------------------------------------------
+models:
+  Observation:
+    task_id: string
+    task_description: string
+    episode_id: string
+    ticket: TicketInfo
+    thread_history: list[dict]
+    available_actions: list[string]
+    step_number: integer
+    max_steps: integer
+    hint: string | null
+
+  TicketInfo:
+    ticket_id: string
+    subject: string
+    body: string
+    customer_tier: string    # free | pro | enterprise
+    account_age_days: integer
+    previous_tickets: integer
+    attachments: list[string]
+
+  Action:
+    action_type: string      # classify | extract | respond | resolve | escalate | submit
+    category: string | null
+    priority: string | null
+    extracted_entities: dict | null
+    required_actions: list[string] | null
+    response_text: string | null
+    resolution_steps: list[string] | null
+    escalation_team: string | null
+    escalation_reason: string | null
+
+  Reward:
+    step_reward: float
+    total_reward: float
+    explanation: string
+
+  StepResult:
+    observation: Observation
+    reward: Reward
+    done: boolean
+    info: dict
+
+  State:
+    task_id: string
+    episode_id: string
+    step_number: integer
+    max_steps: integer
+    done: boolean
+    total_reward: float
+    history: list[dict]
+    final_score: float | null
+
+  GraderResponse:
+    episode_id: string
+    task_id: string
+    score: float              # 0.0 – 1.0
+    breakdown: dict[string, float]
+    feedback: string
+
+# -------------------------------------------------
+# Tasks
+# -------------------------------------------------
+tasks:
+  task1:
+    name: "Ticket Classification"
+    difficulty: easy
+    max_steps: 3
+    description: >
+      Given a customer support ticket, classify it by category
+      (billing | technical | account | feature_request | complaint | general)
+      and priority (low | medium | high | critical).
+    scoring:
+      category_correct: 0.50
+      priority_correct: 0.40
+      efficiency: 0.10
+    tickets: 5
+
+  task2:
+    name: "Information Extraction"
+    difficulty: medium
+    max_steps: 5
+    description: >
+      Extract structured entities (account IDs, names, amounts, dates, domains)
+      from the ticket body and identify the list of required actions.
+    scoring:
+      entity_coverage: 0.60
+      action_coverage: 0.30
+      no_hallucination: 0.10
+    tickets: 5
+
+  task3:
+    name: "Resolution Generation"
+    difficulty: hard
+    max_steps: 8
+    description: >
+      Generate a professional customer-facing response (response_text) and
+      an ordered list of resolution steps. Scored on keyword coverage,
+      step completeness, tone (apology, urgency, timeline), and response length.
+    scoring:
+      keyword_coverage: 0.30
+      step_coverage: 0.30
+      tone_compliance: 0.25
+      length_adequate: 0.10
+      no_empty_steps: 0.05
+    tickets: 5
+
+# -------------------------------------------------
+# Reward design
+# -------------------------------------------------
+reward:
+  type: dense
+  step_cost: -0.02       # small cost per step (encourages efficiency)
+  submit_bonus: 0.05     # bonus for explicit submit action
+  max_step_penalty: -0.10 # penalty for exhausting max_steps
+  grader_bonus: up_to_1.0 # grader score (0–1) added as terminal bonus
+
+# -------------------------------------------------
+# Reproducibility
+# -------------------------------------------------
+reproducibility:
+  dataset: static  # all 15 tickets are fixed, no randomisation
+  graders: deterministic  # rule-based, no LLM judge
+  baseline_mode: heuristic  # no API key required for reference scores
+
+# -------------------------------------------------
+# Deployment
+# -------------------------------------------------
+deployment:
+  framework: FastAPI
+  python: ">=3.10"
+  port: 7860
+  dockerfile: Dockerfile
+  huggingface_space: true
+  space_sdk: docker
