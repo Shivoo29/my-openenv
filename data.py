@@ -1,18 +1,92 @@
 """
-Pre-defined customer support tickets for each task.
+Linux DevOps tasks for SRE troubleshooting environment.
 
-Each ticket has fully specified ground-truth answers so that graders
-are entirely deterministic — no LLM judge required.
-
-Task 1 (easy)   — Ticket Classification
-Task 2 (medium) — Information Extraction
-Task 3 (hard)   — Resolution Generation
+Task 1 (easy)   — Restart crashed Nginx service
+Task 2 (medium) — Fix Docker container misconfiguration  
+Task 3 (hard)   — Debug and fix memory leak in mock API
 """
 from __future__ import annotations
 from typing import Any, Dict, List
 
+# Nginx service configuration
+NGINX_CONFIG_PATH = "/etc/nginx/nginx.conf"
+NGINX_SYSTEMD_PATH = "/etc/systemd/system/nginx.service"
+
+# Docker configuration
+DOCKER_COMPOSE_PATH = "/srv/docker-compose.yml"
+
+# Mock API code path
+MOCK_API_PATH = "/opt/mockapi/app.py"
+
 # ---------------------------------------------------------------------------
-# TASK 1 — Ticket Classification
+# TASK DEFINITIONS
+# ---------------------------------------------------------------------------
+
+TASK_META: Dict[str, Dict[str, Any]] = {
+    "task1": {
+        "name": "Restart Nginx Service",
+        "description": (
+            "Production Nginx service has crashed. Restart the service, "
+            "verify the configuration syntax, and ensure the server "
+            "returns HTTP 200 on port 80. Failing checklist:\n"
+            "1. Restart nginx (systemctl restart nginx)\n"
+            "2. Verify config syntax (nginx -t)\n"
+            "3. Confirm service is running (systemctl status nginx)\n"
+            "4. Check HTTP 200 response (curl http://localhost:80)"
+        ),
+        "difficulty": "easy",
+        "max_steps": 10,
+        "available_actions": ["bash_cmd", "submit"],
+        "passing_conditions": [
+            "nginx_running",
+            "config_valid",
+            "http_200_response",
+        ],
+    },
+    "task2": {
+        "name": "Fix Docker Container Configuration",
+        "description": (
+            "A critical microservice container is misconfigured. The port "
+            "mapping in docker-compose.yml is broken. Fix the configuration, "
+            "redeploy the container, and verify it's accessible on the "
+            "correct port.\n"
+            "1. Edit docker-compose.yml (fix port mapping)\n"
+            "2. Restart containers (docker-compose up -d)\n"
+            "3. Verify container is running\n"
+            "4. Check service responds on mapped port"
+        ),
+        "difficulty": "medium",
+        "max_steps": 15,
+        "available_actions": ["bash_cmd", "file_edit", "submit"],
+        "passing_conditions": [
+            "docker_compose_valid",
+            "container_running",
+            "port_accessible",
+        ],
+    },
+    "task3": {
+        "name": "Find and Fix Memory Leak in Mock API",
+        "description": (
+            "The Python API service is leaking memory and consuming excessive "
+            "resources. Diagnose the memory leak in /opt/mockapi/app.py, fix "
+            "the offending code, and restart the service without root access.\n"
+            "1. Identify the memory leak (check processes, logs)\n"
+            "2. Kill the runaway process\n"
+            "3. Fix the code in app.py (patch the leak)\n"
+            "4. Restart the service as appuser\n"
+            "5. Verify memory usage is normal"
+        ),
+        "difficulty": "hard",
+        "max_steps": 20,
+        "available_actions": ["bash_cmd", "file_edit", "submit"],
+        "passing_conditions": [
+            "process_killed",
+            "code_fixed",
+            "service_restarted",
+            "memory_normal",
+        ],
+    },
+}
 #   Agent must choose: category + priority
 #   Categories: billing | technical | account | feature_request | complaint | general
 #   Priorities: low | medium | high | critical
