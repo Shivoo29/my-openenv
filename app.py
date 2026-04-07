@@ -1,23 +1,20 @@
 """
-FastAPI server for DevOpsEnv - Linux DevOps/SRE troubleshooting environment.
+FastAPI server for SupportEnv — Customer Support Ticket Triage.
 
 Endpoints:
----------
-POST   /reset          Create a new episode
-POST   /step           Advance the episode
-GET    /state          Current episode state
-GET    /tasks          List tasks and action schema
-POST   /grader         Grade a finished episode
-GET    /health         Liveness check
-GET    /               Info / spec link
+  POST   /reset          Create a new episode
+  POST   /step           Advance the episode
+  GET    /state          Current episode state
+  GET    /tasks          List tasks and action schema
+  POST   /grader         Grade a finished episode
+  GET    /health         Liveness check
+  GET    /               Info / spec link
 """
 from __future__ import annotations
 
 import os
-import uuid
-import json
-from typing import Any, Dict, List, Optional
 from datetime import datetime
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,17 +24,13 @@ import environment as env
 from data import TASK_META
 from models import (
     Action,
-    Observation,
-    State,
-    StepResult,
-    TaskInfo,
-    Reward,
     GraderResponse,
+    TaskInfo,
 )
 
 app = FastAPI(
-    title="DevOpsEnv",
-    description="An OpenEnv-compliant Linux DevOps/SRE troubleshooting environment.",
+    title="SupportEnv",
+    description="An OpenEnv-compliant customer support ticket triage environment.",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -51,8 +44,13 @@ app.add_middleware(
 )
 
 
+# ---------------------------------------------------------------------------
+# Request schemas
+# ---------------------------------------------------------------------------
+
 class ResetRequest(BaseModel):
-    task_id: str
+    task_id: str = "task1"
+    ticket_index: Optional[int] = 0
 
 
 class StepRequest(BaseModel):
@@ -71,10 +69,9 @@ class GraderRequest(BaseModel):
 @app.get("/", tags=["meta"])
 def root():
     return {
-        "name": "DevOpsEnv",
+        "name": "SupportEnv",
         "version": "1.0.0",
-        "description": "OpenEnv DevOps/SRE troubleshooting environment",
-        "openenv_spec": "https://github.com/meta-pytorch/OpenEnv",
+        "description": "OpenEnv customer support ticket triage environment",
         "tasks": list(TASK_META.keys()),
         "endpoints": {
             "reset": "POST /reset",
@@ -112,7 +109,7 @@ def tasks():
 @app.post("/reset", tags=["control"])
 def reset(req: ResetRequest):
     try:
-        obs = env.reset(req.task_id)
+        obs = env.reset(req.task_id, ticket_index=req.ticket_index or 0)
         return obs.model_dump()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -155,4 +152,3 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 7860))
     uvicorn.run(app, host="0.0.0.0", port=port, workers=1)
-

@@ -1,7 +1,8 @@
 """
-Pydantic models for DevOpsEnv OpenEnv environment.
+Pydantic models for SupportEnv — Customer Support Ticket Triage.
 
-Domain: Linux DevOps & SRE Troubleshooting
+Domain: SaaS customer support automation
+Tasks: classification, information extraction, resolution generation
 """
 from __future__ import annotations
 
@@ -10,21 +11,18 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# System State Models
+# Ticket Info (what the agent sees)
 # ---------------------------------------------------------------------------
 
-class SystemState(BaseModel):
-    """Current state of the mock Linux server."""
-    task_id: str
-    available_commands: List[str]
-    filesystem_snapshot: str
-    running_processes: List[Dict[str, Any]]
-    service_status: Dict[str, str]
-    logs: str
-    http_ports_open: List[int]
-    docker_containers: List[Dict[str, str]]
-    cpu_usage: float
-    memory_usage_mb: int
+class TicketInfo(BaseModel):
+    """A customer support ticket presented to the agent."""
+    ticket_id: str
+    subject: str
+    body: str
+    customer_tier: str = Field(description="free | pro | enterprise")
+    account_age_days: int
+    previous_tickets: int
+    attachments: List[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -34,17 +32,17 @@ class SystemState(BaseModel):
 class Observation(BaseModel):
     """Everything the agent sees at each step."""
     task_id: str = Field(description="task1 | task2 | task3")
-    task_description: str = Field(description="Human-readable task description")
-    episode_id: str = Field(description="Unique episode UUID")
-    system_state: SystemState
+    task_description: str
+    episode_id: str
+    ticket: TicketInfo
     thread_history: List[Dict[str, str]] = Field(
         default_factory=list,
-        description="Ordered list of {'role': 'agent'|'system', 'content': str}"
+        description="Ordered list of {'role': 'agent'|'system', 'content': str}",
     )
     available_actions: List[str]
     step_number: int
     max_steps: int
-    hint: Optional[str] = Field(default=None)
+    hint: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -52,12 +50,40 @@ class Observation(BaseModel):
 # ---------------------------------------------------------------------------
 
 class Action(BaseModel):
-    """Agent action: run a bash command, edit a file, or submit."""
-    action_type: str = Field(description="bash_cmd | file_edit | submit")
-    command: Optional[str] = Field(default=None, description="Bash command to execute")
-    file_path: Optional[str] = Field(default=None, description="Absolute path to file to edit")
-    file_content: Optional[str] = Field(default=None, description="New full content for the file")
-    summary: Optional[str] = Field(default=None, description="Final summary of actions taken")
+    """Agent action for support ticket processing."""
+    action_type: str = Field(
+        description="classify | extract | respond | resolve | escalate | submit"
+    )
+    # Task 1: Classification
+    category: Optional[str] = Field(
+        default=None,
+        description="billing | technical | account | feature_request | complaint | general",
+    )
+    priority: Optional[str] = Field(
+        default=None,
+        description="low | medium | high | critical",
+    )
+    # Task 2: Extraction
+    extracted_entities: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Key-value pairs extracted from the ticket",
+    )
+    required_actions: Optional[List[str]] = Field(
+        default=None,
+        description="List of actions needed to resolve the ticket",
+    )
+    # Task 3: Resolution
+    response_text: Optional[str] = Field(
+        default=None,
+        description="Customer-facing response text",
+    )
+    resolution_steps: Optional[List[str]] = Field(
+        default=None,
+        description="Ordered list of internal resolution steps",
+    )
+    # Escalation
+    escalation_team: Optional[str] = Field(default=None)
+    escalation_reason: Optional[str] = Field(default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +120,7 @@ class State(BaseModel):
     done: bool
     total_reward: float
     history: List[Dict[str, Any]] = Field(default_factory=list)
-    final_score: Optional[float] = Field(default=None)
+    final_score: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------

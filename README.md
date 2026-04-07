@@ -1,161 +1,125 @@
-﻿---
-title: DevOpsEnv
-emoji: 🛠️
+---
+title: SupportEnv
+emoji: 🎫
 colorFrom: blue
-colorTo: green
+colorTo: indigo
 sdk: docker
 app_port: 7860
 tags:
   - openenv
-  - devops
-  - sre
-  - troubleshooting
+  - customer-support
+  - nlp
+  - ticket-triage
   - agent-evaluation
 pinned: false
 ---
 
-# DevOpsEnv
+# SupportEnv
 
-DevOpsEnv is a practice environment where an agent acts like a junior SRE.
+SupportEnv is an OpenEnv-compliant environment for evaluating LLM agents on customer support ticket triage. Each episode presents a realistic support ticket and asks the agent to classify, extract, or resolve it — scored deterministically against ground-truth labels.
 
-In each episode, the agent gets a broken Linux-like system and must fix it by:
-- Running shell commands
-- Editing files
-- Submitting when the fix is done
+## Tasks
 
-The server gives rewards during the episode and a final score at the end.
+| Task | Difficulty | Action | Max Steps |
+|------|-----------|--------|-----------|
+| Task 1 — Ticket Classification | Easy | `classify` | 3 |
+| Task 2 — Information Extraction | Medium | `extract` | 5 |
+| Task 3 — Resolution Generation | Hard | `respond` | 8 |
 
-## What It Simulates (Simple)
+**Task 1 — Ticket Classification (Easy)**  
+Assign a `category` (billing / technical / account / feature_request / complaint / general) and `priority` (low / medium / high / critical) to each ticket.
 
-There are 3 tasks:
-- Task 1: Nginx is down. Bring service back and verify HTTP is OK.
-- Task 2: Docker compose port mapping is wrong. Fix and redeploy.
-- Task 3: Python API has memory leak behavior. Diagnose and reduce memory usage.
+**Task 2 — Information Extraction (Medium)**  
+Extract structured entities (IDs, names, amounts, dates) and identify the list of required resolution actions.
 
-## How It Works
+**Task 3 — Resolution Generation (Hard)**  
+Write a professional customer-facing response and an ordered list of internal resolution steps. Graded on keyword coverage, step completeness, tone adherence, and minimum length.
 
-Step by step:
-1. Call POST /reset with task_id.
-2. You get episode_id plus current system_state.
-3. Call POST /step with an action.
-4. Repeat steps until done, or send action_type submit.
-5. Call POST /grader to get final score and breakdown.
+## API
 
-Main endpoints:
-- GET /health
-- GET /tasks
-- POST /reset
-- POST /step
-- GET /state
-- POST /grader
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/reset` | Start a new episode |
+| `POST` | `/step` | Submit an action |
+| `GET` | `/state` | Get current episode state |
+| `POST` | `/grader` | Grade a finished episode |
+| `GET` | `/tasks` | List all tasks |
+| `GET` | `/health` | Liveness check |
+| `GET` | `/docs` | OpenAPI docs |
 
-## Action Types
+### Reset
+```json
+POST /reset
+{"task_id": "task1", "ticket_index": 0}
+```
 
-- bash_cmd: Run a command like systemctl status nginx
-- file_edit: Replace content of a file path
-- submit: End episode and grade
+### Step — Task 1 (classify)
+```json
+POST /step
+{
+  "episode_id": "<id>",
+  "action": {"action_type": "classify", "category": "billing", "priority": "high"}
+}
+```
 
-## Quick Start (Normal)
-
-### 1) Install
-
-Windows PowerShell:
-
-python -m pip install -r requirements.txt
-
-### 2) Start server
-
-python -m uvicorn app:app --host 0.0.0.0 --port 7860
-
-### 3) Check health
-
-In another terminal:
-
-Invoke-WebRequest -Uri "http://127.0.0.1:7860/health" -UseBasicParsing
-
-If working, response includes status: healthy.
-
-### 4) Run built-in integration test
-
-python test_integration.py
-
-If working, you should see all 3 tasks run and a final success message.
-
-## Minimal API Example (Normal)
-
-PowerShell example:
-
-$reset = Invoke-WebRequest -Uri "http://127.0.0.1:7860/reset" -Method POST -ContentType "application/json" -Body '{"task_id":"task1"}' | Select-Object -ExpandProperty Content | ConvertFrom-Json
-$episodeId = $reset.episode_id
-
-$step = @{
-  episode_id = $episodeId
-  action = @{
-    action_type = "bash_cmd"
-    command = "systemctl restart nginx"
+### Step — Task 2 (extract)
+```json
+POST /step
+{
+  "episode_id": "<id>",
+  "action": {
+    "action_type": "extract",
+    "extracted_entities": {"customer_name": "Alice", "invoice_number": "INV-001"},
+    "required_actions": ["issue_refund", "send_corrected_invoice"]
   }
-} | ConvertTo-Json -Depth 5
+}
+```
 
-Invoke-WebRequest -Uri "http://127.0.0.1:7860/step" -Method POST -ContentType "application/json" -Body $step
+### Step — Task 3 (respond)
+```json
+POST /step
+{
+  "episode_id": "<id>",
+  "action": {
+    "action_type": "respond",
+    "response_text": "Dear customer, we sincerely apologize...",
+    "resolution_steps": ["verify_account", "issue_refund", "send_confirmation"]
+  }
+}
+```
 
-## Test With LLM (OpenAI Key)
+### Submit
+```json
+POST /step
+{"episode_id": "<id>", "action": {"action_type": "submit"}}
+```
 
-1) Keep API server running.
-2) Set key and run inference:
+## Scoring
 
-PowerShell:
+**Task 1:** category match (0.50) + priority match (0.40) + efficiency (0.10)
 
-$env:OPENAI_API_KEY = "your-openai-key"
-python inference.py --task task1 --model gpt-4o-mini
+**Task 2:** entity coverage (0.60) + action coverage (0.30) + no hallucination (0.10)
 
-You should see step logs, rewards, and a grader score.
+**Task 3:** keyword coverage (0.30) + step coverage (0.30) + tone compliance (0.25) + length adequate (0.10) + non-empty steps (0.05)
 
-## Test With Gemini API Key
+## Running Locally
 
-inference.py now supports OpenAI-compatible base URLs.
+```bash
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 7860
+```
 
-Use Gemini via OpenAI-compatible endpoint:
+## Running the Baseline Agent
 
-PowerShell:
-
-$env:GEMINI_API_KEY = "your-gemini-key"
-$env:OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-python inference.py --task task1 --model gemini-2.5-flash
-
-Notes:
-- You can also use OPENAI_API_KEY instead of GEMINI_API_KEY.
-- If your model name is unavailable, switch to a Gemini model enabled on your key.
-- Keep the environment server running at http://127.0.0.1:7860 (or pass --api-url).
+```bash
+export HF_TOKEN=your_token_here
+export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
+python inference.py
+```
 
 ## Docker
 
-Build:
-
-docker build -t devopsenv .
-
-Run:
-
-docker run -p 7860:7860 devopsenv
-
-Then open:
-- http://127.0.0.1:7860/health
-- http://127.0.0.1:7860/docs
-
-## Project Files
-
-- app.py: FastAPI API
-- environment.py: episode logic and simulator
-- graders.py: deterministic scoring
-- data.py: task metadata
-- models.py: Pydantic schemas
-- inference.py: LLM baseline runner
-- test_integration.py: local end-to-end check
-
-## Troubleshooting
-
-- Port already in use:
-  - change server port or stop old process.
-- 400/404 from API:
-  - check episode_id and task_id values.
-- LLM errors:
-  - verify API key, model name, and OPENAI_BASE_URL for Gemini.
+```bash
+docker build -t supportenv .
+docker run -p 7860:7860 supportenv
+```

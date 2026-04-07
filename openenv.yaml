@@ -57,14 +57,6 @@ interface:
       episode_id: string
     response: GraderResponse
 
-  baseline:
-    method: POST
-    path: /baseline
-    request:
-      model: string          # optional, default heuristic
-      ticket_index: integer  # optional, default 0
-    response: BaselineResult
-
   health:
     method: GET
     path: /health

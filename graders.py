@@ -1,191 +1,244 @@
 """
-Graders for DevOpsEnv tasks.
+Deterministic graders for SupportEnv tasks.
 
-Deterministic scoring based on system state changes and action validity.
+Each grader inspects the agent's action_history against ground-truth data
+and returns (score, breakdown, feedback) where score is in [0.0, 1.0].
+
+Task 1 — Classification:  category match (0.50) + priority match (0.40) + efficiency (0.10)
+Task 2 — Extraction:      entity coverage (0.60) + action coverage (0.30) + no hallucination (0.10)
+Task 3 — Resolution:      keyword coverage (0.30) + step coverage (0.30) + tone (0.25) +
+                           length (0.10) + non-empty steps (0.05)
 """
-from typing import Any, Dict, Tuple
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Tuple
 
 
-def grade_task(task_id: str, episode_state: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]:
-    """
-    Grade a completed task episode.
-    
-    Returns (score, breakdown, feedback)
-    """
+def grade_task(
+    task_id: str, episode_state: Dict[str, Any]
+) -> Tuple[float, Dict[str, float], str]:
     if task_id == "task1":
-        return grade_task1(episode_state)
+        return _grade_classification(episode_state)
     elif task_id == "task2":
-        return grade_task2(episode_state)
+        return _grade_extraction(episode_state)
     elif task_id == "task3":
-        return grade_task3(episode_state)
+        return _grade_resolution(episode_state)
+    return 0.0, {}, "Unknown task"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _last_action_of_type(
+    history: List[Dict[str, Any]], action_type: str
+) -> Optional[Dict[str, Any]]:
+    """Return the last action matching *action_type*, or None."""
+    for action in reversed(history):
+        if action.get("action_type") == action_type:
+            return action
+    return None
+
+
+def _normalize(s: Any) -> str:
+    return str(s).strip().lower() if s is not None else ""
+
+
+# ---------------------------------------------------------------------------
+# Task 1 — Classification
+# ---------------------------------------------------------------------------
+
+def _grade_classification(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]:
+    """
+    Score breakdown:
+      category_correct  0.50 — exact match
+      priority_correct  0.40 — exact match
+      efficiency        0.10 — 1 step = full, degrades linearly
+    """
+    gt = ep["ticket_data"]["ground_truth"]
+    history = ep.get("action_history", [])
+
+    breakdown: Dict[str, float] = {
+        "category_correct": 0.0,
+        "priority_correct": 0.0,
+        "efficiency": 0.0,
+    }
+
+    classify_action = _last_action_of_type(history, "classify")
+    if classify_action is None:
+        return 0.0, breakdown, "No classify action found."
+
+    # Category
+    if _normalize(classify_action.get("category")) == _normalize(gt["category"]):
+        breakdown["category_correct"] = 0.50
+
+    # Priority
+    if _normalize(classify_action.get("priority")) == _normalize(gt["priority"]):
+        breakdown["priority_correct"] = 0.40
+
+    # Efficiency: full marks if classified in 1 step, degrades linearly
+    max_steps = ep.get("max_steps", 3)
+    steps_used = ep.get("step_number", max_steps)
+    if steps_used <= 1:
+        breakdown["efficiency"] = 0.10
     else:
-        return 0.0, {}, "Unknown task"
+        breakdown["efficiency"] = round(max(0.0, 0.10 * (1 - (steps_used - 1) / max_steps)), 4)
+
+    score = round(min(sum(breakdown.values()), 1.0), 4)
+    parts = ", ".join(f"{k}={v:.2f}" for k, v in breakdown.items())
+    return score, breakdown, f"Task 1: {parts}"
 
 
-def grade_task1(episode_state: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]:
+# ---------------------------------------------------------------------------
+# Task 2 — Information Extraction
+# ---------------------------------------------------------------------------
+
+def _grade_extraction(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]:
     """
-    Grade Task 1: Restart Nginx.
-    
-    Success criteria:
-    - nginx service is running (30%)
-    - nginx config is valid (30%)
-    - HTTP 200 response on port 80 (40%)
+    Score breakdown:
+      entity_coverage   0.60 — fraction of ground-truth entities matched
+      action_coverage   0.30 — fraction of required actions matched
+      no_hallucination  0.10 — penalty for extra entities not in ground truth
     """
-    state_dict = episode_state.get("system_state", {})
-    action_history = episode_state.get("action_history", [])
-    
-    breakdown = {
-        "nginx_running": 0.0,
-        "config_valid": 0.0,
-        "http_200": 0.0,
+    gt = ep["ticket_data"]["ground_truth"]
+    history = ep.get("action_history", [])
+
+    breakdown: Dict[str, float] = {
+        "entity_coverage": 0.0,
+        "action_coverage": 0.0,
+        "no_hallucination": 0.10,  # start with full marks, deduct
     }
-    
-    # Check if nginx is running
-    service_status = state_dict.get("service_status", {})
-    if service_status.get("nginx") == "active":
-        breakdown["nginx_running"] = 0.3
-    
-    # Check if config validation was attempted and passed
-    config_valid = False
-    for action in action_history:
-        output = action.get("output", "")
-        if output and ("syntax is ok" in str(output).lower() or "test is successful" in str(output).lower()):
-            config_valid = True
-            breakdown["config_valid"] = 0.3
-            break
-    
-    # Check if HTTP 200 response was achieved
-    http_ports = state_dict.get("http_ports_open", [])
-    if 80 in http_ports:
-        # Verify http 200 response was confirmed
-        for action in action_history:
-            output = action.get("output", "")
-            cmd = action.get("command", "")
-            if output and cmd and "OK" in str(output) and "curl" in str(cmd).lower():
-                breakdown["http_200"] = 0.4
-                break
-    
-    score = sum(breakdown.values())
-    feedback = f"Task 1 Grading: nginx_running={breakdown['nginx_running']:.1f}, config_valid={breakdown['config_valid']:.1f}, http_200={breakdown['http_200']:.1f}"
-    
-    return min(score, 1.0), breakdown, feedback
+
+    extract_action = _last_action_of_type(history, "extract")
+    if extract_action is None:
+        breakdown["no_hallucination"] = 0.0
+        return 0.0, breakdown, "No extract action found."
+
+    # --- Entity coverage ---
+    gt_entities: Dict[str, Any] = gt.get("entities", {})
+    pred_entities: Dict[str, Any] = extract_action.get("extracted_entities") or {}
+
+    if gt_entities:
+        matched = 0
+        for key, gt_val in gt_entities.items():
+            pred_val = pred_entities.get(key)
+            if pred_val is not None and _entity_matches(gt_val, pred_val):
+                matched += 1
+        breakdown["entity_coverage"] = round(0.60 * matched / len(gt_entities), 4)
+
+    # --- Action coverage ---
+    gt_actions: List[str] = gt.get("required_actions", [])
+    pred_actions: List[str] = extract_action.get("required_actions") or []
+    pred_actions_lower = [_normalize(a) for a in pred_actions]
+
+    if gt_actions:
+        matched_actions = sum(
+            1 for ga in gt_actions if _normalize(ga) in pred_actions_lower
+        )
+        breakdown["action_coverage"] = round(0.30 * matched_actions / len(gt_actions), 4)
+
+    # --- No hallucination ---
+    if pred_entities and gt_entities:
+        extra_keys = set(pred_entities.keys()) - set(gt_entities.keys())
+        if extra_keys:
+            penalty = min(len(extra_keys) * 0.02, 0.10)
+            breakdown["no_hallucination"] = round(max(0.0, 0.10 - penalty), 4)
+
+    score = round(min(sum(breakdown.values()), 1.0), 4)
+    parts = ", ".join(f"{k}={v:.2f}" for k, v in breakdown.items())
+    return score, breakdown, f"Task 2: {parts}"
 
 
-def grade_task2(episode_state: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]:
+def _entity_matches(gt_val: Any, pred_val: Any) -> bool:
+    """Flexible entity comparison — handles strings, lists, and numbers."""
+    if isinstance(gt_val, list) and isinstance(pred_val, list):
+        gt_set = {_normalize(v) for v in gt_val}
+        pred_set = {_normalize(v) for v in pred_val}
+        return gt_set == pred_set
+    return _normalize(gt_val) == _normalize(pred_val)
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — Resolution Generation
+# ---------------------------------------------------------------------------
+
+def _grade_resolution(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]:
     """
-    Grade Task 2: Fix Docker configuration.
-    
-    Success criteria:
-    - docker-compose.yml was edited (25%)
-    - docker-compose up -d was successful (25%)
-    - Container is running (25%)
-    - Service accessible on correct port (25%)
+    Score breakdown:
+      keyword_coverage  0.30 — fraction of required keywords found in response
+      step_coverage     0.30 — fraction of required resolution steps matched
+      tone_compliance   0.25 — apology / urgency / timeline adherence
+      length_adequate   0.10 — response meets minimum length
+      no_empty_steps    0.05 — all resolution steps are non-empty
     """
-    state_dict = episode_state.get("system_state", {})
-    action_history = episode_state.get("action_history", [])
-    files = state_dict.get("files", {})
-    
-    breakdown = {
-        "file_edited": 0.0,
-        "compose_ran": 0.0,
-        "container_running": 0.0,
-        "port_accessible": 0.0,
+    gt = ep["ticket_data"]["ground_truth"]
+    history = ep.get("action_history", [])
+
+    breakdown: Dict[str, float] = {
+        "keyword_coverage": 0.0,
+        "step_coverage": 0.0,
+        "tone_compliance": 0.0,
+        "length_adequate": 0.0,
+        "no_empty_steps": 0.05,  # assume pass unless empty steps found
     }
-    
-    # Check if docker-compose.yml was edited correctly
-    compose_file = "/srv/docker-compose.yml"
-    if compose_file in files:
-        content = files[compose_file]
-        if content and "3000:3000" in str(content):
-            breakdown["file_edited"] = 0.25
-    
-    # Check if docker-compose up -d was run
-    for action in action_history:
-        cmd = action.get("command")
-        if cmd and "docker-compose up -d" in str(cmd):
-            output = action.get("output", "")
-            if output and ("done" in str(output).lower() or "created" in str(output).lower()):
-                breakdown["compose_ran"] = 0.25
-            break
-    
-    # Check if container is running
-    containers = state_dict.get("docker_containers", [])
-    if containers:
-        for container in containers:
-            if container.get("status") == "running" and "mockapi" in str(container.get("name", "")):
-                breakdown["container_running"] = 0.25
-                break
-    
-    # Check if port is correctly mapped
-    if containers:
-        for container in containers:
-            if "3000:3000" in str(container.get("ports", "")):
-                breakdown["port_accessible"] = 0.25
-                break
-    
-    score = sum(breakdown.values())
-    feedback = f"Task 2 Grading: file_edited={breakdown['file_edited']:.2f}, compose_ran={breakdown['compose_ran']:.2f}, container_running={breakdown['container_running']:.2f}, port_accessible={breakdown['port_accessible']:.2f}"
-    
-    return min(score, 1.0), breakdown, feedback
 
+    respond_action = _last_action_of_type(history, "respond")
+    if respond_action is None:
+        breakdown["no_empty_steps"] = 0.0
+        return 0.0, breakdown, "No respond action found."
 
-def grade_task3(episode_state: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]:
-    """
-    Grade Task 3: Fix memory leak.
-    
-    Success criteria:
-    - Process was killed (25%)
-    - Code was fixed (removing the leak) (25%)
-    - Service was restarted (25%)
-    - Memory usage decreased (25%)
-    """
-    state_dict = episode_state.get("system_state", {})
-    action_history = episode_state.get("action_history", [])
-    files = state_dict.get("files", {})
-    processes = state_dict.get("running_processes", [])
-    
-    breakdown = {
-        "process_killed": 0.0,
-        "code_fixed": 0.0,
-        "service_restarted": 0.0,
-        "memory_reduced": 0.0,
-    }
-    
-    # Check if python process was killed
-    has_python_leak = False
-    if processes:
-        has_python_leak = any(p.get("name") == "python3" and p.get("rss_mb", 512) > 1024 for p in processes)
-    if not has_python_leak:
-        # Process was killed
-        breakdown["process_killed"] = 0.25
-    
-    # Check if code was fixed (removed the memory leak)
-    app_file = "/opt/mockapi/app.py"
-    if app_file in files:
-        content = files[app_file]
-        # Memory leak is the unbounded list append - check if it is fixed
-        if content and ("request_cache.append" not in str(content) or "request_cache = []" not in str(content)):
-            # If it has been removed or replaced with something better
-            if "request_cache" not in str(content) or "# " in str(content):
-                breakdown["code_fixed"] = 0.25
-    
-    # Check if service was restarted
-    service_status = state_dict.get("service_status", {})
-    if service_status.get("mockapi") == "active":
-        # And there is a newer process
-        for action in action_history:
-            cmd = action.get("command", "")
-            if cmd and "python3" in str(cmd) and ("start" in str(cmd) or "&" in str(cmd)):
-                breakdown["service_restarted"] = 0.25
-                break
-    
-    # Check if memory usage decreased
-    initial_memory = 2048
-    current_memory = state_dict.get("memory_usage_mb", 2048)
-    if current_memory < initial_memory * 0.75:  # At least 25% improvement
-        breakdown["memory_reduced"] = 0.25
-    
-    score = sum(breakdown.values())
-    feedback = f"Task 3 Grading: process_killed={breakdown['process_killed']:.2f}, code_fixed={breakdown['code_fixed']:.2f}, service_restarted={breakdown['service_restarted']:.2f}, memory_reduced={breakdown['memory_reduced']:.2f}"
-    
-    return min(score, 1.0), breakdown, feedback
+    response_text: str = respond_action.get("response_text") or ""
+    resolution_steps: List[str] = respond_action.get("resolution_steps") or []
+    response_lower = response_text.lower()
+
+    # --- Keyword coverage ---
+    required_keywords: List[str] = gt.get("required_keywords", [])
+    if required_keywords:
+        matched_kw = sum(1 for kw in required_keywords if kw.lower() in response_lower)
+        breakdown["keyword_coverage"] = round(0.30 * matched_kw / len(required_keywords), 4)
+
+    # --- Step coverage ---
+    gt_steps: List[str] = gt.get("required_resolution_steps", [])
+    if gt_steps:
+        pred_steps_lower = [_normalize(s) for s in resolution_steps]
+        matched_steps = sum(
+            1 for gs in gt_steps if _normalize(gs) in pred_steps_lower
+        )
+        breakdown["step_coverage"] = round(0.30 * matched_steps / len(gt_steps), 4)
+
+    # --- Tone compliance ---
+    tone_req = gt.get("tone_requirements", {})
+    tone_checks = 0
+    tone_pass = 0
+    if tone_req.get("must_apologize"):
+        tone_checks += 1
+        apology_words = ["apolog", "sorry", "regret", "sincerely"]
+        if any(w in response_lower for w in apology_words):
+            tone_pass += 1
+    if tone_req.get("must_acknowledge_urgency"):
+        tone_checks += 1
+        urgency_words = ["urgent", "immediately", "priority", "asap", "right away", "as soon as"]
+        if any(w in response_lower for w in urgency_words):
+            tone_pass += 1
+    if tone_req.get("must_provide_timeline"):
+        tone_checks += 1
+        timeline_words = ["within", "hours", "minutes", "by end of", "shortly", "today", "tomorrow", "timeline", "expect"]
+        if any(w in response_lower for w in timeline_words):
+            tone_pass += 1
+    if tone_checks > 0:
+        breakdown["tone_compliance"] = round(0.25 * tone_pass / tone_checks, 4)
+    else:
+        breakdown["tone_compliance"] = 0.25  # no tone requirements = full marks
+
+    # --- Length adequate ---
+    min_len = gt.get("expected_response_length_min", 80)
+    if len(response_text) >= min_len:
+        breakdown["length_adequate"] = 0.10
+
+    # --- Non-empty steps ---
+    if not resolution_steps or any(not s.strip() for s in resolution_steps):
+        breakdown["no_empty_steps"] = 0.0
+
+    score = round(min(sum(breakdown.values()), 1.0), 4)
+    parts = ", ".join(f"{k}={v:.2f}" for k, v in breakdown.items())
+    return score, breakdown, f"Task 3: {parts}"

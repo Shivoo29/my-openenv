@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests_new.py -v)",
+      "Bash(pip install:*)",
+      "Bash(pytest tests_new.py -v)",
+      "Bash(/var/data/python/bin/pytest tests_new.py -v)",
+      "Bash(python test_integration.py)",
+      "Bash(docker build:*)",
+      "Bash(/var/data/python/bin/pytest tests_new.py -v --tb=short)",
+      "WebFetch(domain:exploring-solver-openenv-solvor.hf.space)",
+      "Bash(curl -s -o /tmp/reset_empty.json -w 'HTTP %{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' https://exploring-solver-openenv-solvor.hf.space/reset --max-time 30)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -X POST -H 'Content-Type: application/json' -d '{\"task_id\":\"task1\"}' https://exploring-solver-openenv-solvor.hf.space/reset --max-time 30)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 test_integration.py)"
+    ]
+  }
+}
