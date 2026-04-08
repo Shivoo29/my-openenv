@@ -11,6 +11,7 @@ Task 3 — Resolution:      keyword coverage (0.30) + step coverage (0.30) + ton
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -19,7 +20,17 @@ SCORE_EPSILON = 0.0001
 
 def _strict_score(score: float) -> float:
     """Map any score into the strict open interval (0, 1)."""
-    return round(min(max(score, SCORE_EPSILON), 1.0 - SCORE_EPSILON), 4)
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        value = SCORE_EPSILON
+
+    # Guard against NaN, which would bypass numeric comparisons.
+    if math.isnan(value):
+        value = SCORE_EPSILON
+
+    value = min(max(value, SCORE_EPSILON), 1.0 - SCORE_EPSILON)
+    return round(value, 4)
 
 
 def grade_task(
