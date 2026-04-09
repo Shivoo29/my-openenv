@@ -1,0 +1,22 @@
+name: Sync to Hugging Face Space
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to Hugging Face Space
+        uses: huggingface/huggingface-spaces-sync-action@v1
+        with:
+          repo_id: Shivoo29/my-env
+          token: ${{ secrets.HF_TOKEN }}
