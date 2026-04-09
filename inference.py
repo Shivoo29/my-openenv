@@ -234,7 +234,9 @@ def run_episode(
         error_msg = str(exc)
         print(f"[DEBUG] Episode error: {exc}", file=sys.stderr, flush=True)
 
-    log_end(success=success, steps=steps_taken, rewards=rewards)
+    # Log grader score as the canonical task score (always in (0,1))
+    task_score = round(min(max(final_score if final_score > 0 else 0.01, 0.01), 0.99), 4)
+    log_end(success=success, steps=steps_taken, rewards=[task_score])
 
     return {
         "task_id": task_id,

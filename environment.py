@@ -170,7 +170,7 @@ def step(episode_id: str, action: Action) -> StepResult:
     )
 
     reward = Reward(
-        step_reward=round(step_reward, 4),
+        step_reward=round(min(max(step_reward, 0.01), 0.99), 4),
         total_reward=ep["total_reward"],
         explanation=explanation,
     )
