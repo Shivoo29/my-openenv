@@ -182,7 +182,7 @@ reward:
   step_cost: -0.02       # small cost per step (encourages efficiency)
   submit_bonus: 0.05     # bonus for explicit submit action
   max_step_penalty: -0.10 # penalty for exhausting max_steps
-  grader_bonus: up_to_1.0 # grader score (0–1) added as terminal bonus
+  grader_bonus: 1.0       # grader score (0–1) added as terminal bonus
 
 # -------------------------------------------------
 # Reproducibility
