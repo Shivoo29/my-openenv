@@ -137,9 +137,10 @@ tasks:
       (billing | technical | account | feature_request | complaint | general)
       and priority (low | medium | high | critical).
     scoring:
-      category_correct: 0.50
+      baseline: 0.01
+      category_correct: 0.49
       priority_correct: 0.40
-      efficiency: 0.10
+      efficiency: 0.09
     tickets: 5
 
   task2:
@@ -150,9 +151,10 @@ tasks:
       Extract structured entities (account IDs, names, amounts, dates, domains)
       from the ticket body and identify the list of required actions.
     scoring:
-      entity_coverage: 0.60
+      baseline: 0.01
+      entity_coverage: 0.59
       action_coverage: 0.30
-      no_hallucination: 0.10
+      no_hallucination: 0.09
     tickets: 5
 
   task3:
@@ -164,11 +166,12 @@ tasks:
       an ordered list of resolution steps. Scored on keyword coverage,
       step completeness, tone (apology, urgency, timeline), and response length.
     scoring:
-      keyword_coverage: 0.30
+      baseline: 0.01
+      keyword_coverage: 0.29
       step_coverage: 0.30
       tone_compliance: 0.25
       length_adequate: 0.10
-      no_empty_steps: 0.05
+      no_empty_steps: 0.04
     tickets: 5
 
 # -------------------------------------------------

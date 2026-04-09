@@ -15,7 +15,7 @@ import math
 from typing import Any, Dict, List, Optional, Tuple
 
 
-SCORE_EPSILON = 0.0001
+SCORE_EPSILON = 0.01
 
 
 def _strict_score(score: float) -> float:
@@ -29,7 +29,7 @@ def _strict_score(score: float) -> float:
     if math.isnan(value):
         value = SCORE_EPSILON
 
-    value = min(max(value, SCORE_EPSILON), 1.0 - SCORE_EPSILON)
+    value = min(max(value, 0.0), 1.0)
     return round(value, 4)
 
 
@@ -42,7 +42,7 @@ def grade_task(
         return _grade_extraction(episode_state)
     elif task_id == "task3":
         return _grade_resolution(episode_state)
-    return _strict_score(0.0), {}, "Unknown task"
+    return _strict_score(0.01), {}, "Unknown task"
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +78,7 @@ def _grade_classification(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], 
     history = ep.get("action_history", [])
 
     breakdown: Dict[str, float] = {
+        "baseline": 0.01,
         "category_correct": 0.0,
         "priority_correct": 0.0,
         "efficiency": 0.0,
@@ -89,7 +90,7 @@ def _grade_classification(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], 
 
     # Category
     if _normalize(classify_action.get("category")) == _normalize(gt["category"]):
-        breakdown["category_correct"] = 0.50
+        breakdown["category_correct"] = 0.49
 
     # Priority
     if _normalize(classify_action.get("priority")) == _normalize(gt["priority"]):
@@ -99,9 +100,9 @@ def _grade_classification(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], 
     max_steps = ep.get("max_steps", 3)
     steps_used = ep.get("step_number", max_steps)
     if steps_used <= 1:
-        breakdown["efficiency"] = 0.10
+        breakdown["efficiency"] = 0.09
     else:
-        breakdown["efficiency"] = round(max(0.0, 0.10 * (1 - (steps_used - 1) / max_steps)), 4)
+        breakdown["efficiency"] = round(max(0.0, 0.09 * (1 - (steps_used - 1) / max_steps)), 4)
 
     score = _strict_score(sum(breakdown.values()))
     parts = ", ".join(f"{k}={v:.2f}" for k, v in breakdown.items())
@@ -123,15 +124,16 @@ def _grade_extraction(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]
     history = ep.get("action_history", [])
 
     breakdown: Dict[str, float] = {
+        "baseline": 0.01,
         "entity_coverage": 0.0,
         "action_coverage": 0.0,
-        "no_hallucination": 0.10,  # start with full marks, deduct
+        "no_hallucination": 0.09,  # start with full marks, deduct
     }
 
     extract_action = _last_action_of_type(history, "extract")
     if extract_action is None:
         breakdown["no_hallucination"] = 0.0
-        return _strict_score(0.0), breakdown, "No extract action found."
+        return _strict_score(0.01), breakdown, "No extract action found."
 
     # --- Entity coverage ---
     gt_entities: Dict[str, Any] = gt.get("entities", {})
@@ -143,7 +145,7 @@ def _grade_extraction(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]
             pred_val = pred_entities.get(key)
             if pred_val is not None and _entity_matches(gt_val, pred_val):
                 matched += 1
-        breakdown["entity_coverage"] = round(0.60 * matched / len(gt_entities), 4)
+        breakdown["entity_coverage"] = round(0.59 * matched / len(gt_entities), 4)
 
     # --- Action coverage ---
     gt_actions: List[str] = gt.get("required_actions", [])
@@ -160,13 +162,11 @@ def _grade_extraction(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]
     if pred_entities and gt_entities:
         extra_keys = set(pred_entities.keys()) - set(gt_entities.keys())
         if extra_keys:
-            penalty = min(len(extra_keys) * 0.02, 0.10)
-            breakdown["no_hallucination"] = round(max(0.0, 0.10 - penalty), 4)
-
+            penalty = min(len(extra_keys) * 0.02, 0.09)
+            breakdown["no_hallucination"] = round(max(0.0, 0.09 - penalty), 4)
     score = _strict_score(sum(breakdown.values()))
     parts = ", ".join(f"{k}={v:.2f}" for k, v in breakdown.items())
     return score, breakdown, f"Task 2: {parts}"
-
 
 def _entity_matches(gt_val: Any, pred_val: Any) -> bool:
     """Flexible entity comparison — handles strings, lists, and numbers."""
@@ -194,17 +194,18 @@ def _grade_resolution(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]
     history = ep.get("action_history", [])
 
     breakdown: Dict[str, float] = {
+        "baseline": 0.01,
         "keyword_coverage": 0.0,
         "step_coverage": 0.0,
         "tone_compliance": 0.0,
         "length_adequate": 0.0,
-        "no_empty_steps": 0.05,  # assume pass unless empty steps found
+        "no_empty_steps": 0.04,  # assume pass unless empty steps found
     }
 
     respond_action = _last_action_of_type(history, "respond")
     if respond_action is None:
         breakdown["no_empty_steps"] = 0.0
-        return _strict_score(0.0), breakdown, "No respond action found."
+        return _strict_score(0.01), breakdown, "No respond action found."
 
     response_text: str = respond_action.get("response_text") or ""
     resolution_steps: List[str] = respond_action.get("resolution_steps") or []
@@ -214,7 +215,7 @@ def _grade_resolution(ep: Dict[str, Any]) -> Tuple[float, Dict[str, float], str]
     required_keywords: List[str] = gt.get("required_keywords", [])
     if required_keywords:
         matched_kw = sum(1 for kw in required_keywords if kw.lower() in response_lower)
-        breakdown["keyword_coverage"] = round(0.30 * matched_kw / len(required_keywords), 4)
+        breakdown["keyword_coverage"] = round(0.29 * matched_kw / len(required_keywords), 4)
 
     # --- Step coverage ---
     gt_steps: List[str] = gt.get("required_resolution_steps", [])
