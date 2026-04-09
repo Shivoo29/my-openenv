@@ -16,7 +16,10 @@ jobs:
           lfs: true
 
       - name: Push to Hugging Face Space
-        uses: huggingface/huggingface-spaces-sync-action@v1
-        with:
-          repo_id: Shivoo29/my-env
-          token: ${{ secrets.HF_TOKEN }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global credential.helper store
+          echo "https://Shivoo29:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
+          git remote add huggingface https://huggingface.co/spaces/Shivoo29/my-env || true
+          git push huggingface main --force
