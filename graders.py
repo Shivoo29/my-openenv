@@ -29,7 +29,7 @@ def _strict_score(score: float) -> float:
     if math.isnan(value):
         value = SCORE_EPSILON
 
-    value = min(max(value, 0.0), 1.0)
+    value = min(max(value, SCORE_EPSILON), 1.0 - SCORE_EPSILON)
     return round(value, 4)
 
 
