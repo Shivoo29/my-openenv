@@ -15,7 +15,7 @@ Most checks align to this flow:
 
 - `app.py`: FastAPI API surface (`/reset`, `/step`, `/state`, `/tasks`, `/grader`, `/health`)
 - `environment.py`: episode lifecycle and reward accumulation (`reset`, `step`, `get_state`, `grade`)
-- `graders.py`: deterministic terminal scoring per task with score clamped to `[0.0, 1.0]`
+- `graders.py`: deterministic terminal scoring per task with score clamped to `(0, 1)`
 - `data.py`: task metadata and ticket datasets with ground truth labels/entities/steps
 - `models.py`: typed Pydantic models used by API and internal state
 - `inference.py`: baseline runner; calls the API, logs strict `[START]/[STEP]/[END]`
@@ -105,7 +105,7 @@ python inference.py
 
 ## 7. Example scorer sanity checks
 
-- Task 1: submit `classify` then `submit`, verify non-binary reward and final score in `[0, 1]`
+- Task 1: submit `classify` then `submit`, verify non-binary reward and final score in `(0, 1)`
 - Task 2: include deterministic entity/action coverage keys from ticket text
 - Task 3: include professional response plus ordered resolution steps
 

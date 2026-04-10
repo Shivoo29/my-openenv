@@ -36,6 +36,7 @@ ENV_BASE_URL = (
 TEMPERATURE = 0.3
 MAX_TOKENS = 1024
 BENCHMARK = "supportenv"
+SCORE_EPSILON = 0.01
 
 TASKS = [
     {"task_id": "task1", "name": "Ticket Classification", "tickets": 5},
@@ -61,12 +62,19 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
         flush=True,
     )
+
+
+def _strict_open_score(value: Optional[float]) -> float:
+    """Keep emitted task scores inside the validator's required open interval."""
+    if value is None:
+        value = SCORE_EPSILON
+    return round(min(max(float(value), SCORE_EPSILON), 1.0 - SCORE_EPSILON), 4)
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +200,7 @@ def run_episode(
     steps_taken = 0
     success = False
     error_msg: Optional[str] = None
+    final_score = SCORE_EPSILON
 
     try:
         # Reset
@@ -228,21 +237,23 @@ def run_episode(
         # Grade
         grade = env_request("POST", "/grader", json={"episode_id": episode_id})
         final_score = grade["score"]
-        success = final_score >= 0.5
+        success = _strict_open_score(final_score) >= 0.5
 
     except Exception as exc:
         error_msg = str(exc)
         print(f"[DEBUG] Episode error: {exc}", file=sys.stderr, flush=True)
 
-    # Log grader score as the canonical task score (always in (0,1))
-    task_score = round(min(max(final_score if final_score > 0 else 0.01, 0.01), 0.99), 4)
-    log_end(success=success, steps=steps_taken, rewards=[task_score])
+    # Emit the canonical task score separately from dense per-step rewards.
+    task_score = _strict_open_score(final_score)
+    logged_rewards = [_strict_open_score(r) for r in (rewards or [task_score])]
+    log_end(success=success, steps=steps_taken, score=task_score, rewards=logged_rewards)
 
     return {
         "task_id": task_id,
         "ticket_index": ticket_index,
         "steps": steps_taken,
         "rewards": rewards,
+        "score": task_score,
         "success": success,
     }
 

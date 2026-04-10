@@ -153,7 +153,9 @@ The baseline emits strict structured stdout lines only:
 
 - `[START] task=<...> env=<...> model=<...>`
 - `[STEP] step=<...> action=<...> reward=<...> done=<...> error=<...>`
-- `[END] success=<...> steps=<...> rewards=<...>`
+- `[END] success=<...> steps=<...> score=<...> rewards=<...>`
+
+Validator note: each emitted task `score` must stay strictly inside `(0, 1)`.
 
 ## Docker
 
