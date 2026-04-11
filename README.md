@@ -118,9 +118,22 @@ POST /step
 
 **Task 1:** category match (0.50) + priority match (0.40) + efficiency (0.10)
 
-**Task 2:** entity coverage (0.60) + action coverage (0.30) + no hallucination (0.10)
+**Task 2:** entity coverage (0.60) + action coverage (0.30) + no hallucination (0.10). Wrong values on known entity keys, extra entity keys, and actions not present in the ticket’s ground-truth action list all reduce the hallucination component.
 
-**Task 3:** keyword coverage (0.30) + step coverage (0.30) + tone compliance (0.25) + length adequate (0.10) + non-empty steps (0.05)
+**Task 3:** keyword coverage (0.30) + step coverage (0.30) + tone compliance (0.25) + length adequate (0.10) + non-empty steps (0.05). Resolution steps must appear in the same relative order as the reference checklist; repeated low-diversity text reduces keyword, step, and length credit; extra invented steps incur a penalty.
+
+## Reference baseline scores
+
+Deterministic oracle (no LLM), matching `BASELINE_MODE=heuristic` in `inference.py` against the bundled 15 tickets:
+
+| Task   | Mean grader score |
+|--------|-------------------|
+| task1  | 0.96              |
+| task2  | 0.99              |
+| task3  | 0.99              |
+| Overall (15 episodes) | 0.98 |
+
+Run locally: `BASELINE_MODE=heuristic python inference.py` (requires the SupportEnv server on `OPENENV_BASE_URL`, default `http://localhost:7860`).
 
 ## Running Locally
 
@@ -131,7 +144,18 @@ uvicorn app:app --host 0.0.0.0 --port 7860
 
 ## Running the Baseline Agent
 
+**Reproducible default (no API key):** uses a deterministic oracle aligned with the static tickets.
+
 ```bash
+export OPENENV_BASE_URL=http://localhost:7860
+export BASELINE_MODE=heuristic
+python inference.py
+```
+
+**LLM baseline:** set `BASELINE_MODE=llm` and provide a key. `OPENAI_API_KEY` is accepted in addition to `HF_TOKEN` / `API_KEY`. `LLM_TEMPERATURE` defaults to `0` for stable sampling.
+
+```bash
+export BASELINE_MODE=llm
 export API_BASE_URL=https://router.huggingface.co/v1
 export HF_TOKEN=your_token_here
 export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
@@ -142,7 +166,7 @@ Required environment variables for baseline LLM calls:
 
 - `API_BASE_URL` (default provided in code)
 - `MODEL_NAME` (default provided in code)
-- `HF_TOKEN` (must be provided)
+- `HF_TOKEN`, `OPENAI_API_KEY`, or `API_KEY` (when `BASELINE_MODE=llm`)
 
 Environment endpoint variables for the baseline:
 

@@ -31,6 +31,13 @@ from models import (
 # In-memory store: episode_id → episode dict
 _EPISODES: Dict[str, Dict[str, Any]] = {}
 
+# Task-specific actions that the environment executes and scores.
+TASK_ALLOWED_ACTIONS: Dict[str, frozenset[str]] = {
+    "task1": frozenset({"classify", "submit"}),
+    "task2": frozenset({"extract", "submit"}),
+    "task3": frozenset({"respond", "submit"}),
+}
+
 
 # ---------------------------------------------------------------------------
 # Reward constants (match openenv.yaml)
@@ -62,6 +69,9 @@ def reset(task_id: str, ticket_index: int = 0) -> Observation:
     safe_meta = get_task_meta(task_id)
 
     episode_id = str(uuid.uuid4())
+    revelations = ticket_data.get("internal_revelations") or _default_revelations(
+        ticket_data
+    )
     _EPISODES[episode_id] = {
         "task_id": task_id,
         "ticket_index": ticket_index,
@@ -72,6 +82,7 @@ def reset(task_id: str, ticket_index: int = 0) -> Observation:
         "total_reward": 0.0,
         "action_history": [],
         "final_score": None,
+        "internal_revelations": list(revelations),
     }
 
     ticket_info = TicketInfo(
@@ -106,6 +117,7 @@ def step(episode_id: str, action: Action) -> StepResult:
         raise ValueError(f"Episode {episode_id} is already done.")
 
     task_id = ep["task_id"]
+    _validate_action(task_id, action)
 
     ep["step_number"] += 1
     ep["action_history"].append(action.model_dump())
@@ -152,10 +164,7 @@ def step(episode_id: str, action: Action) -> StepResult:
         attachments=ticket_data.get("attachments", []),
     )
 
-    thread_history = [
-        {"role": "agent", "content": _summarize_action(a)}
-        for a in ep["action_history"]
-    ]
+    thread_history = _build_thread_history(ep)
 
     obs = Observation(
         task_id=task_id,
@@ -217,6 +226,49 @@ def grade(episode_id: str) -> Tuple[float, Dict[str, float], str]:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _validate_action(task_id: str, action: Action) -> None:
+    allowed = TASK_ALLOWED_ACTIONS.get(task_id)
+    if allowed is None:
+        raise ValueError(f"Unknown task_id {task_id!r}")
+    if action.action_type not in allowed:
+        raise ValueError(
+            f"Action {action.action_type!r} is not valid for {task_id}. "
+            f"Allowed: {sorted(allowed)}"
+        )
+
+
+def _default_revelations(ticket_data: Dict[str, Any]) -> list[str]:
+    """Synthetic internal notes revealed after non-submit steps (no ground truth)."""
+    tid = ticket_data.get("ticket_id", "unknown")
+    tier = ticket_data.get("customer_tier", "unknown")
+    prev = ticket_data.get("previous_tickets", 0)
+    return [
+        (
+            f"[system] Case {tid}: CRM shows customer tier={tier}, "
+            f"prior_closed_tickets={prev}. SLA clock started on this thread."
+        ),
+        "[system] Attachment checksums verified where present; metadata is available to agents.",
+        "[system] Workflow note: internal routing fields unlock after your first substantive action.",
+    ]
+
+
+def _build_thread_history(ep: Dict[str, Any]) -> list[dict[str, str]]:
+    """Interleave agent summaries with progressive system-side evidence."""
+    history: list[dict[str, str]] = []
+    revelations: list[str] = ep.get("internal_revelations") or []
+    rev_i = 0
+    for action_dict in ep["action_history"]:
+        history.append(
+            {"role": "agent", "content": _summarize_action(action_dict)}
+        )
+        atype = action_dict.get("action_type")
+        if atype != "submit" and rev_i < len(revelations):
+            history.append({"role": "system", "content": revelations[rev_i]})
+            rev_i += 1
+    return history
+
 
 def _calculate_step_reward(
     task_id: str, action: Action, ep: Dict[str, Any], done: bool

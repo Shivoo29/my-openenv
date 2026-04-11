@@ -86,7 +86,7 @@ models:
     attachments: list[string]
 
   Action:
-    action_type: string      # classify | extract | respond | resolve | escalate | submit
+    action_type: string      # task1: classify|submit; task2: extract|submit; task3: respond|submit
     category: string | null
     priority: string | null
     extracted_entities: dict | null
@@ -163,8 +163,10 @@ tasks:
     max_steps: 8
     description: >
       Generate a professional customer-facing response (response_text) and
-      an ordered list of resolution steps. Scored on keyword coverage,
-      step completeness, tone (apology, urgency, timeline), and response length.
+      an ordered list of resolution steps. Scored on keyword coverage with
+      lexical-diversity checks, ordered step coverage (subsequence match plus
+      penalties for extra invented steps), tone (apology, urgency, timeline),
+      and minimum length.
     scoring:
       baseline: 0.01
       keyword_coverage: 0.29
@@ -190,7 +192,9 @@ reward:
 reproducibility:
   dataset: static  # all 15 tickets are fixed, no randomisation
   graders: deterministic  # rule-based, no LLM judge
-  baseline_mode: heuristic  # no API key required for reference scores
+  # inference.py: BASELINE_MODE=heuristic uses deterministic oracle actions (no API).
+  # BASELINE_MODE=llm uses the configured chat API with temperature=0 when supported.
+  baseline_mode: heuristic
 
 # -------------------------------------------------
 # Deployment

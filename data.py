@@ -497,20 +497,20 @@ TASK_META: Dict[str, Dict[str, Any]] = {
         "difficulty": "medium",
         "max_steps": 5,
         "tickets": TASK2_TICKETS,
-        "available_actions": ["extract", "respond", "submit"],
+        "available_actions": ["extract", "submit"],
     },
     "task3": {
         "name": "Resolution Generation",
         "description": (
             "Generate a complete, professional customer-facing response "
             "plus an ordered list of resolution steps for each ticket. "
-            "Responses are graded on keyword coverage, step completeness, "
-            "tone adherence, and minimum length."
+            "Responses are graded on keyword coverage (with lexical diversity checks), "
+            "ordered resolution-step coverage, tone adherence, and minimum length."
         ),
         "difficulty": "hard",
         "max_steps": 8,
         "tickets": TASK3_TICKETS,
-        "available_actions": ["respond", "resolve", "escalate", "submit"],
+        "available_actions": ["respond", "submit"],
     },
 }
 

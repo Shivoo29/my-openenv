@@ -52,7 +52,10 @@ class Observation(BaseModel):
 class Action(BaseModel):
     """Agent action for support ticket processing."""
     action_type: str = Field(
-        description="classify | extract | respond | resolve | escalate | submit"
+        description=(
+            "Task-specific: task1 classify|submit; task2 extract|submit; "
+            "task3 respond|submit"
+        )
     )
     # Task 1: Classification
     category: Optional[str] = Field(
