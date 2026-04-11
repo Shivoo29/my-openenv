@@ -192,8 +192,8 @@ reward:
 reproducibility:
   dataset: static  # all 15 tickets are fixed, no randomisation
   graders: deterministic  # rule-based, no LLM judge
-  # inference.py: BASELINE_MODE=heuristic uses deterministic oracle actions (no API).
-  # BASELINE_MODE=llm uses the configured chat API with temperature=0 when supported.
+  # inference.py: with API_KEY (or HF_TOKEN / OPENAI_API_KEY) unset, BASELINE_MODE=heuristic
+  # uses the oracle; when validators inject API_KEY + API_BASE_URL, LLM calls run by default.
   baseline_mode: heuristic
 
 # -------------------------------------------------

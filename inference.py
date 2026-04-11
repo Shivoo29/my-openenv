@@ -5,11 +5,10 @@ Runs an LLM agent against all 3 tasks (5 tickets each) and emits the
 mandatory [START]/[STEP]/[END] stdout format.
 
 Environment variables:
-  API_BASE_URL   LLM endpoint            (default: https://router.huggingface.co/v1)
+  API_BASE_URL   LLM endpoint (OpenAI-compatible; required by many validators / LiteLLM proxy)
   MODEL_NAME     Model identifier         (default: Qwen/Qwen2.5-72B-Instruct)
-  HF_TOKEN       API key (Hugging Face router)
-  OPENAI_API_KEY OpenAI-compatible key   (alias: API_KEY)
-  BASELINE_MODE  heuristic | llm         (default: heuristic — reproducible oracle, no API)
+  API_KEY        Preferred chat API key   (evaluators inject this; also: HF_TOKEN, OPENAI_API_KEY)
+  BASELINE_MODE  heuristic | llm         (unset = LLM if any API key exists, else oracle)
   LLM_TEMPERATURE  default 0.0 for reproducibility when using llm mode
     OPENENV_BASE_URL  SupportEnv server URL (preferred)
     API_BASE_URL_ENV  SupportEnv server URL (backward compatible alias)
@@ -29,10 +28,11 @@ from openai import OpenAI
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = (
-    os.getenv("HF_TOKEN")
+# Submission validators inject API_KEY + API_BASE_URL (LiteLLM proxy); prefer API_KEY first.
+LLM_API_KEY = (
+    os.getenv("API_KEY")
+    or os.getenv("HF_TOKEN")
     or os.getenv("OPENAI_API_KEY")
-    or os.getenv("API_KEY")
     or ""
 )
 ENV_BASE_URL = (
@@ -79,9 +79,19 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
 
 
 def _baseline_mode() -> str:
-    """heuristic = deterministic oracle (default); llm = call remote chat API."""
-    mode = (os.getenv("BASELINE_MODE") or "heuristic").strip().lower()
-    return mode if mode in {"heuristic", "llm"} else "heuristic"
+    """
+    heuristic = deterministic oracle (no HTTP to LLM).
+    llm = OpenAI-compatible chat API at API_BASE_URL with LLM_API_KEY.
+
+    If BASELINE_MODE is unset: use LLM whenever a key is present (validator / proxy runs);
+    otherwise oracle-only for local runs without credentials.
+    """
+    raw = (os.getenv("BASELINE_MODE") or "").strip().lower()
+    if raw == "heuristic":
+        return "heuristic"
+    if raw == "llm":
+        return "llm"
+    return "llm" if LLM_API_KEY else "heuristic"
 
 
 def _strict_open_score(value: Optional[float]) -> float:
@@ -359,21 +369,20 @@ def _action_summary(action: Dict[str, Any]) -> str:
 
 def main() -> None:
     mode = _baseline_mode()
-    if mode == "llm" and not HF_TOKEN:
+    if (os.getenv("BASELINE_MODE") or "").strip().lower() == "llm" and not LLM_API_KEY:
         print(
-            "[WARN] BASELINE_MODE=llm but no HF_TOKEN/OPENAI_API_KEY/API_KEY; "
-            "using heuristic oracle.",
+            "[WARN] BASELINE_MODE=llm but no API_KEY/HF_TOKEN/OPENAI_API_KEY; "
+            "using deterministic oracle.",
             file=sys.stderr,
             flush=True,
         )
-    use_llm = mode == "llm" and bool(HF_TOKEN)
+    use_llm = mode == "llm" and bool(LLM_API_KEY)
     client: Optional[OpenAI] = None
     if use_llm:
-        client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+        client = OpenAI(base_url=API_BASE_URL, api_key=LLM_API_KEY)
     else:
         print(
-            "[INFO] Running deterministic oracle baseline (BASELINE_MODE=heuristic). "
-            "Set BASELINE_MODE=llm and provide an API key to call a remote model.",
+            "[INFO] Running deterministic oracle (no LLM API key or BASELINE_MODE=heuristic).",
             flush=True,
         )
 

@@ -144,7 +144,9 @@ uvicorn app:app --host 0.0.0.0 --port 7860
 
 ## Running the Baseline Agent
 
-**Reproducible default (no API key):** uses a deterministic oracle aligned with the static tickets.
+**Submission / validator runs** inject `API_BASE_URL` and `API_KEY` (LiteLLM proxy). With a key present, `inference.py` **calls the LLM by default** (no need to set `BASELINE_MODE=llm`). Do not hardcode keys; use the injected variables.
+
+**Local oracle (no API key):** deterministic actions, no chat HTTP.
 
 ```bash
 export OPENENV_BASE_URL=http://localhost:7860
@@ -152,21 +154,20 @@ export BASELINE_MODE=heuristic
 python inference.py
 ```
 
-**LLM baseline:** set `BASELINE_MODE=llm` and provide a key. `OPENAI_API_KEY` is accepted in addition to `HF_TOKEN` / `API_KEY`. `LLM_TEMPERATURE` defaults to `0` for stable sampling.
+**Local LLM baseline:** provide a key; optional `BASELINE_MODE=llm` is redundant if `API_KEY` is set.
 
 ```bash
-export BASELINE_MODE=llm
 export API_BASE_URL=https://router.huggingface.co/v1
-export HF_TOKEN=your_token_here
+export API_KEY=your_token_here
 export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
 python inference.py
 ```
 
 Required environment variables for baseline LLM calls:
 
-- `API_BASE_URL` (default provided in code)
+- `API_BASE_URL` (default provided in code; **must** be the validator’s URL when submitting)
 - `MODEL_NAME` (default provided in code)
-- `HF_TOKEN`, `OPENAI_API_KEY`, or `API_KEY` (when `BASELINE_MODE=llm`)
+- `API_KEY` (preferred), or `HF_TOKEN`, or `OPENAI_API_KEY`
 
 Environment endpoint variables for the baseline:
 
